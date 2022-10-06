@@ -118,3 +118,112 @@ We can also register services with components. This way, the service is only ava
   providers: [ModalService]
 })
 ```
+
+### Modal Visibility
+
+The ModalService should handle updating the visibility of the modal. We can use the **[ngClass]** directive with property binding to set the _hidden_ class.
+
+```html
+<div
+  class="fixed z-50 inset-0 overflow-y-auto"
+  id="modal"
+  [ngClass]="{ hidden: !modal.isModalOpen() }"
+></div>
+```
+
+To open the modal, we can use event binding of the **(click)** event. To prevent redirect upon clicking an anchor element, we can pass the event object into a function.
+
+```html
+<a class="px-2" href="#" (click)="openModal($event)">Login / Register</a>
+```
+
+```typescript
+export class NavComponent implements OnInit {
+  constructor(private modal: ModalService) {}
+
+  openModal($event: Event) {
+    $event.preventDefault();
+    this.modal.toggleModal();
+  }
+}
+```
+
+## Singleton
+
+Singleton design pattern is when one isntance of a class exists in an application. If our app needs an instance of a service, angular will check if an instance already exists and return it, otherwise will create a new instance. In our app, we have one modal service that manages an array of modals using an ID system.
+
+```typescript
+interface IModal {
+  id: string;
+  visible: boolean;
+}
+@Injectable({
+  providedIn: "root",
+})
+export class ModalService {
+  private modals: IModal[] = [];
+
+  constructor() {}
+
+  register(id: string) {
+    this.modals.push({
+      id,
+      visible: false,
+    });
+  }
+
+  isModalOpen(id: string): boolean {
+    // Boolean(this.modals.find((el) => el.id === id)?.visible)
+    return !!this.modals.find((el) => el.id === id)?.visible;
+  }
+
+  toggleModal(id: string) {
+    const modal = this.modals.find((el) => el.id === id);
+
+    if (modal) {
+      modal.visible = !modal.visible;
+    }
+  }
+}
+```
+
+Since the modal component is always the child of the component supplying the content, we can use **Input** to send down data to the modal component.
+
+```html
+<app-modal modalId="auth">
+  <!-- modal content -->
+</app-modal>
+```
+
+```html
+<!-- Auth Modal -->
+<div
+  class="fixed z-50 inset-0 overflow-y-auto"
+  id="modal"
+  [ngClass]="{ hidden: !modal.isModalOpen(modalID) }"
+></div>
+```
+
+```typescript
+export class AuthModalComponent implements OnInit {
+  constructor(public modal: ModalService) {}
+
+  ngOnInit(): void {
+    this.modal.register("auth");
+  }
+}
+```
+
+```typescript
+export class ModalComponent implements OnInit {
+  @Input() modalID = "";
+
+  constructor(public modal: ModalService) {}
+
+  ngOnInit(): void {}
+
+  closeModal() {
+    this.modal.toggleModal(this.modalID);
+  }
+}
+```
