@@ -8,7 +8,7 @@ We then create the configuration file using `npx tailwind init`. This creates a 
 
 ```js
 module.exports = {
-  content: ["./src/app/**/*.{html,js}"],
+  content: ["./src/app/**/*.{html,ts}"],
   theme: {
     extend: {},
   },
@@ -226,4 +226,190 @@ export class ModalComponent implements OnInit {
     this.modal.toggleModal(this.modalID);
   }
 }
+```
+
+## Forms
+
+We need to consider validation, feedback and dynamic fields for forms. To use reactive forms in Angular, we can import the ReactiveFormsModule. We add the following import to `user.module.ts`.
+
+```typescript
+@NgModule({
+  imports: [CommonModule, SharedModule, ReactiveFormsModule],
+})
+```
+
+Under the class definition, We import **FormGroup** which is a container for our forms and register a new form with a Form Control object. To bind the form to the template, we can bind the **[formGroup]** directive. The input fields will have to be bound to the controllers as well using **formControlName**.
+
+```typescript
+export class RegisterComponent {
+  registerForm = new FormGroup({
+    name: new FormControl(""),
+    email: new FormControl(""),
+    age: new FormControl(""),
+    password: new FormControl(""),
+    confirm_password: new FormControl(""),
+    phoneNumber: new FormControl(""),
+  });
+}
+```
+
+```html
+<!-- Registration Form -->
+<form [formGroup]="registerForm">
+  <!-- Name -->
+  <div class="mb-3">
+    <label class="inline-block mb-2">Name</label>
+    <input
+      formControlName="name"
+      type="text"
+      class="block w-full py-1.5 px-3 text-gray-200 border border-gray-400 transition duration-500 focus:outline-none rounded bg-transparent focus:border-indigo-400"
+      placeholder="Enter Name"
+    />
+  </div>
+  ...
+</form>
+```
+
+### Validation
+
+Reactive forms allows validations from the client side. Angular comes with validators out of the box. The second argument for FormControl objects is an array of validators. Angular also allows running validators against a regex through Validators.pattern().
+
+```typescript
+name: new FormControl('', [Validators.required, Validators.minLength(3)]),
+```
+
+### Error Handling
+
+Errors can be access from the controllers.
+
+```html
+<p
+  *ngIf="
+        registerForm.controls.name.touched &&
+        registerForm.controls.name.dirty &&
+        registerForm.controls.name.errors?.required
+      "
+  class="text-red-400"
+>
+  Field is required
+</p>
+```
+
+We can create a presentational component for outputting the input and error messages. It doesn't update the data. To bind this input component to the form controls, we can pass the controller through **@Input** decorators. In the register component template, we bind the control property to the registerForm.controls.name object. The control property expects a FormControl object, but the registerForm.controls.name object is an AbstractControl. To be able to bind, we can add the form controls through **this** keyword, instead of directly initializing.
+
+```typescript
+export class RegisterComponent {
+  name = new FormControl("", [Validators.required, Validators.minLength(3)]);
+  email = new FormControl("");
+  age = new FormControl("");
+  password = new FormControl("");
+  confirm_password = new FormControl("");
+  phoneNumber = new FormControl("");
+
+  registerForm = new FormGroup({
+    name: this.name,
+    email: this.email,
+    age: this.age,
+    password: this.password,
+    confirm_password: this.confirm_password,
+    phoneNumber: this.phoneNumber,
+  });
+}
+```
+
+We can then bind the properties in our register component template to the [control] property of the custom Input component.
+
+```html
+<!-- Registration Form -->
+<form [formGroup]="registerForm">
+  <!-- Name -->
+  <div class="mb-3">
+    <label class="inline-block mb-2">Name</label>
+    <app-input [control]="name" placeholder="Enter Name"></app-input>
+  </div>
+</form>
+```
+
+```typescript
+export class InputComponent implements OnInit {
+  @Input() control: FormControl = new FormControl();
+}
+```
+
+In the input template, we need to update the **formControlName** directive, which searches for the control in the form group. We can directly bind to the **control** property using **[formControl]** directive, which allows us to directly bind the form control object to the input element. By wrapping the p element with <ng-container>, we can create an invisible element for grouping elements. We can place common conditions on this container.
+
+```html
+<input
+  [formControl]="control"
+  type="text"
+  class="block w-full py-1.5 px-3 text-gray-200 border border-gray-400 transition duration-500 focus:outline-none rounded bg-transparent focus:border-indigo-400"
+  placeholder="Enter Name"
+/>
+<ng-container *ngIf="control.touched && control.dirty">
+  <p *ngIf="control.errors?.required" class="text-red-400">Field is required</p>
+  <p *ngIf="control.errors?.minlength" class="text-red-400">
+    The value you inputted is {{ control.errors?.minlength.actualLength }}
+    characters long. It must be at least {{
+    control.errors?.minlength.requiredLength }}
+  </p>
+</ng-container>
+```
+
+### Input Masking
+
+For the phone number field, we will need to format the field value. We can use `npm i ngx-mask@13.1.15` and import it to the shared module.
+
+```typescript
+imports: [CommonModule, ReactiveFormsModule, NgxMaskModule.forRoot()],
+```
+
+Since not all inputs need masking, we should only conditionally apply input masking. In the Input component class file, we can create a property for toggling input masking on the input. The property should be configured by the parent component, and if no value is passed, we should assume it as disabled, which can be achieved by setting the value into an empty string.
+
+```typescript
+  @Input() format = '';
+```
+
+In the template file, we bind the **[mask]** directive to the format property we created. The **[dropSpecialCharacters]** option is set to false to keep the special characters.
+
+```html
+<input
+  [formControl]="control"
+  [type]="type"
+  class="block w-full py-1.5 px-3 text-gray-200 border border-gray-400 transition duration-500 focus:outline-none rounded bg-transparent focus:border-indigo-400"
+  [placeholder]="placeholder"
+  [mask]="format"
+  [dropSpecialCharacters]="false"
+/>
+```
+
+To apply the masking for the phone number, we use the following masking format. The parentheses and dashes will be automatically added by the library.
+
+```html
+<app-input
+  [control]="phoneNumber"
+  placeholder="Enter Phone Number"
+  format="(000)000-0000"
+></app-input>
+```
+
+### Disabling Buttons
+
+The FormGroup object contains properties for checking validity of the form. We bind the button's **[disable]** property to the form group's invalid property.
+
+```html
+<button
+  type="submit"
+  class="block w-full bg-indigo-400 text-white py-1.5 px-3 rounded transition hover:bg-indigo-500 disabled:opacity-50 disabled:bg-indigo-400"
+  [disabled]="registerForm.invalid"
+>
+  Submit
+</button>
+```
+
+### Form Submission
+
+The form submission is handled using a custom event emitted by the FormGroup object. Angular provides the **(ngSubmit)** custom event for listening to submission events.
+
+```html
+<form [formGroup]="registerForm" (ngSubmit)="register()"></form>
 ```
