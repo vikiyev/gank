@@ -406,7 +406,56 @@ The FormGroup object contains properties for checking validity of the form. We b
 </button>
 ```
 
-### Form Submission
+## Template Driven Forms
+
+Template Driven Forms are configured directly from the template. It has a lower learning curve, but is more difficult to scale. Behind the scenes, the **FormsModule** registers the forms in our template into an NgForm, which creates a FormGroup instance automatically.
+
+### Two Way Binding
+
+Two way data binding allows us to listen to events and update a property simultaneously. To help Angular identify the controls in our form, we can use the **NgModel** directive. Before adding the directive, we also need to assign a name property to the input which will be used as the id for the control. To use two way binding, we combine both property binding and event binding. It will set the value for an element using property binding at the same time it emits an event whenever the value changes.
+
+```html
+<input
+  name="email"
+  [(ngModel)]="credentials.email"
+  type="email"
+  class="block w-full py-1.5 px-3 text-gray-200 border border-gray-400 transition duration-500 focus:outline-none rounded bg-transparent focus:border-indigo-400"
+  placeholder="Enter Email"
+/>
+```
+
+### Template Variables
+
+We can access the properties in the form group using template variables. The hash character allows us to declare variables in a template.
+
+```html
+<!-- Login Form -->
+<form #loginForm="ngForm">
+  <!-- Email -->
+  <div class="mb-3">
+    <label class="inline-block mb-2">Email</label>
+    <!-- <input [value]="" (change)="" /> -->
+    <input
+      #email="ngModel"
+      name="email"
+      required
+      pattern="[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?"
+      [(ngModel)]="credentials.email"
+      type="email"
+      class="block w-full py-1.5 px-3 text-gray-200 border border-gray-400 transition duration-500 focus:outline-none rounded bg-transparent focus:border-indigo-400"
+      placeholder="Enter Email"
+    />
+    <p
+      *ngIf="email.errors && email.touched && email.dirty"
+      class="text-red-400"
+    >
+      Email is invalid.
+    </p>
+  </div>
+</form>
+```
+
+## Form Submission
 
 The form submission is handled using a custom event emitted by the FormGroup object. Angular provides the **(ngSubmit)** custom event for listening to submission events.
 
@@ -414,7 +463,7 @@ The form submission is handled using a custom event emitted by the FormGroup obj
 <form [formGroup]="registerForm" (ngSubmit)="register()"></form>
 ```
 
-### Alert Component
+## Alert Component
 
 For teh alert component, we will allow a parent component to project content into it. We create a `get bgColor()` allows us to access the value returned by the function as a property. It allows us to create properties with extra logic before the property is set. We bind this property into the **[ngClass]** property.
 
