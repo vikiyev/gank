@@ -413,3 +413,45 @@ The form submission is handled using a custom event emitted by the FormGroup obj
 ```html
 <form [formGroup]="registerForm" (ngSubmit)="register()"></form>
 ```
+
+### Alert Component
+
+For teh alert component, we will allow a parent component to project content into it. We create a `get bgColor()` allows us to access the value returned by the function as a property. It allows us to create properties with extra logic before the property is set. We bind this property into the **[ngClass]** property.
+
+```typescript
+export class AlertComponent implements OnInit {
+  @Input() color = "blue";
+  // function for returning tailwind color
+  get bgColor() {
+    return `bg-${this.color}-400`;
+  }
+}
+```
+
+```html
+<div
+  class="text-white text-center bold p-4 mb-4 rounded-md"
+  [ngClass]="bgColor"
+>
+  <ng-content></ng-content>
+</div>
+```
+
+To allow the above behavior, we need to configure the tailwind.config file with a safelist option.
+
+```js
+module.exports = {
+  content: ["./src/app/**/*.{html,ts}"],
+  safelist: ["bg-blue-400", "bg-green-400", "bg-red-400"],
+  theme: {
+    extend: {},
+  },
+  plugins: [],
+};
+```
+
+We then proceed in using the alert component in our register template and add the properties into the class file.
+
+```html
+<app-alert *ngIf="showAlert" [color]="alertColor"> {{ alertMsg }} </app-alert>
+```
