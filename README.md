@@ -455,6 +455,40 @@ We can access the properties in the form group using template variables. The has
 </form>
 ```
 
+## RxJS
+
+RxJS is a library for filtering, sorting and coordinating data.
+
+### Observables, Observers and Subscription
+
+Observables are wrappers around a data source. Data can come from an asynchronous operation, mouse events, http requests, etc. An observable instance has a **subscribe()** function which allows us to pass in an Observer. The **next()** function is responsible for handling data pushed into the Observable. The **value** argument refers to the data emitted by the observable.
+
+Observers are responsible for receiving the data after an Observable emitted the data. An Observer establishing a connection with an Observable is a **Subscription**. We can have multiple subscribers to a single Observable. An observer object can have three functions: emitting value, handling errors, and handling completion of an observable. The return function of the Observable is executed whenever it completes or an Observer unsubscribes. When unsubscribing an Observer, its complete function is not called however.
+
+### RxJS Operators
+
+RxJS Operators are functions that are used to help control an observable's stream of data. This allows us to write declaratively. **Creation Operators** are operators that can create new observables from events, requests, intervals, etc. **Pipeable Operators** takes an observable as an input and outputs a new observable, which allows us to modify data before pushing it to an Observer.
+
+### Flattening Operators
+
+Flattening Operators are operators used for subscribing to inner observables. Their values will get pushed into the next operator.
+
+#### mergeMap
+
+Subscribes to the incoming observable as soon as received. Does not limit the number of active inner observables.
+
+#### switchMap
+
+The same as mergeMap, except it limits the number of active inner observables to 1. If a new value is pushed into the pipeline, a new observable will be created, made active and the previous observable will be completed. Useful for managing one active subscription at a time.
+
+#### concatMap
+
+Queues inner observables. Limits active observables to 1, however newer subscriptions are placed into a queue and will not be subscribed to until the current observable is completed.
+
+#### exhaustMap
+
+Ignores incoming observables if an observable is currently active. As long as there is an active subscription, subsequent observables are ignored. Useful if we need a current Observable to complete before moving on such as with forms to prevent duplicate submissions.
+
 ## Form Submission
 
 The form submission is handled using a custom event emitted by the FormGroup object. Angular provides the **(ngSubmit)** custom event for listening to submission events.
