@@ -1,5 +1,42 @@
 # Gank
 
+Features:
+Stateless authentication with Firebase
+
+- [Gank](#gank)
+  - [Tailwind Installation](#tailwind-installation)
+  - [Creating the User Module](#creating-the-user-module)
+  - [Content Projection](#content-projection)
+    - [Multi Slot Content Projection](#multi-slot-content-projection)
+  - [Services](#services)
+    - [Dependency Injection](#dependency-injection)
+    - [Modal Visibility](#modal-visibility)
+  - [Singleton](#singleton)
+  - [Forms](#forms)
+    - [Validation](#validation)
+    - [Error Handling](#error-handling)
+    - [Input Masking](#input-masking)
+    - [Disabling Buttons](#disabling-buttons)
+  - [Template Driven Forms](#template-driven-forms)
+    - [Two Way Binding](#two-way-binding)
+    - [Template Variables](#template-variables)
+  - [RxJS](#rxjs)
+    - [Observables, Observers and Subscription](#observables-observers-and-subscription)
+    - [RxJS Operators](#rxjs-operators)
+    - [Flattening Operators](#flattening-operators)
+      - [mergeMap](#mergemap)
+      - [switchMap](#switchmap)
+      - [concatMap](#concatmap)
+      - [exhaustMap](#exhaustmap)
+  - [Firebase](#firebase)
+    - [Registration and Storing User Data to Firestore](#registration-and-storing-user-data-to-firestore)
+  - [Authentication](#authentication)
+    - [Checking if User is Logged In](#checking-if-user-is-logged-in)
+    - [Initializing Firebase First](#initializing-firebase-first)
+  - [Form Submission](#form-submission)
+  - [Alert Component](#alert-component)
+  - [Custom Validators](#custom-validators)
+
 ## Tailwind Installation
 
 Tailwind is a CSS framework that focuses on utility-first approach. Angular officially supports tailwind. We first need to install the tailwind package using `npm install -D tailwindcss`
@@ -489,6 +526,183 @@ Queues inner observables. Limits active observables to 1, however newer subscrip
 
 Ignores incoming observables if an observable is currently active. As long as there is an active subscription, subsequent observables are ignored. Useful if we need a current Observable to complete before moving on such as with forms to prevent duplicate submissions.
 
+## Firebase
+
+Firebase is a suite of backend tools that can be used for web applications. We can store data, authenticate users, store files, provide analytics etc. For the database, we use Firestore database. AngularFire is used to interact with Firebase and can be added to the project using `ng add @angular/fire`. We add the firebase configuration into our environment variables.
+
+```typescript
+export const environment = {
+  production: true,
+  firebase: {
+    apiKey: "",
+    authDomain: "",
+    projectId: "",
+    storageBucket: "",
+    appId: "",
+  },
+};
+```
+
+The authDomain is the URL for handling credentials. The storageBucket is the location where files are stored. We can then intitialize firebase into our app by importing the **AngularFireModule** into our app.module. Likewise, we also import **AngularFireAuthModule** to use the authentication service.
+
+```typescript
+  imports: [
+    BrowserModule,
+    AppRoutingModule,
+    UserModule,
+    AngularFireModule.initializeApp(environment.firebase),
+    AngularFireAuthModule,
+  ],
+```
+
+### Registration and Storing User Data to Firestore
+
+To register a new user, we first need to turn on the Authentication feature in firebase. We use the Email provider. The **createUserWithEmailAndPassword** method returns a promise, so we will need to use async/await.
+
+We also create a model, which is an interface for describing and manipulating data in a database. Whenever we create a collection, it is a good idea to create a model for describing the documents.
+
+```typescript
+export default interface IUser {
+  email: string;
+  password: string;
+  age: number;
+  name: string;
+  phoneNumber: string;
+}
+```
+
+```typescript
+export class RegisterComponent {
+  constructor(private auth: AngularFireAuth, private db: AngularFirestore) {}
+  inSubmission = false;
+
+  async register() {
+    // reset message
+    this.showAlert = true;
+    this.alertMsg = "Please wait. Your account is being created.";
+    this.alertColor = "blue";
+    this.inSubmission = true;
+
+    try {
+      await this.auth.createUser(this.registerForm.value);
+    } catch (e) {
+      console.error(e);
+      this.alertMsg = "An unexpected error occurred. Please try again later";
+      this.alertColor = "red";
+      this.inSubmission = false;
+
+      // stop function from executing further
+      return;
+    }
+
+    this.alertMsg = "Success! Your account has been created.";
+    this.alertColor = "green";
+  }
+}
+```
+
+The **AngularFirestoreCollection** class is a helper class for annotation properties to a collection. In this case, we use the IUser interface generic.
+
+```typescript
+export class AuthService {
+  private usersCollection: AngularFirestoreCollection<IUser>;
+  constructor(private auth: AngularFireAuth, private db: AngularFirestore) {
+    this.usersCollection = db.collection("users");
+  }
+
+  public async createUser(userData: IUser) {
+    if (!userData.password) {
+      throw new Error("Password not provided!");
+    }
+
+    const userCred = await this.auth.createUserWithEmailAndPassword(
+      userData.email,
+      userData.password
+    );
+
+    if (!userCred.user) {
+      throw new Error("User can't be found");
+    }
+
+    // save user info to db, including its uid
+    await this.usersCollection.doc(userCred.user.uid).set({
+      name: userData.name,
+      email: userData.email,
+      age: userData.age,
+      phoneNumber: userData.phoneNumber,
+    });
+
+    // update user display name and profile picture
+    await userCred.user.updateProfile({
+      displayName: userData.name,
+    });
+  }
+}
+```
+
+## Authentication
+
+Authentication is mainly handled on the server side. The login data is sent to the server, which then responds with a token upon successful authentication. Firebase uses IndexedDB api for storing structured data on the user's browsers. After storing the token, we send it back to Firebase with each request and checks the token.
+
+**Stateless Authentication** is where the server does not actively keep track of who is logged in. A token is used to verify the user instead. It is common to user stateless authentication for SPAs. Traditionally, applications keep track of users using **Sessions** which are stored on the server.
+
+With the Firebase SDK, the tokens are stored on our behalf. In addition, whenever we initiate a request, firebase will attach the token with our requests automatically.
+
+### Checking if User is Logged In
+
+We can retrieve the current logged in user by subscribing to the AngularFireAuth observable. We can convert the user into a boolean by using the map operator combined with double negation.
+
+```typescript
+export class AuthService {
+  private usersCollection: AngularFirestoreCollection<IUser>;
+  public isAuthenticated$: Observable<boolean>;
+
+  constructor(private auth: AngularFireAuth, private db: AngularFirestore) {
+    this.usersCollection = db.collection('users');
+    this.isAuthenticated$ = auth.user.pipe(map((user) => !!user));
+  }
+```
+
+To subscribe to the observable directly from within a template, we can use an async pipe. The values pushed by the observable will be pushed to the directive.
+
+```typescript
+export class NavComponent implements OnInit {
+  constructor(public modal: ModalService, public auth: AuthService) {}
+```
+
+```html
+<li *ngIf="!(auth.isAuthenticated$ | async); else authLinks">
+  <a class="px-2" href="#" (click)="openModal($event)">Login / Register</a>
+</li>
+<ng-template #authLinks>
+  <li>
+    <a class="px-2" href="#">Manage</a>
+  </li>
+  <li>
+    <a class="px-2" href="#">Upload</a>
+  </li>
+</ng-template>
+```
+
+### Initializing Firebase First
+
+By initializing Firebase first, we will be able to determine if a user is logged in ahead of time. We need to modify the main.ts file, which is the entry point of the app.
+
+```typescript
+firebase.initializeApp(environment.firebase);
+
+let appInit = false;
+
+firebase.auth().onAuthStateChanged(() => {
+  if (!appInit) {
+    platformBrowserDynamic()
+      .bootstrapModule(AppModule)
+      .catch((err) => console.error(err));
+  }
+  appInit = true;
+});
+```
+
 ## Form Submission
 
 The form submission is handled using a custom event emitted by the FormGroup object. Angular provides the **(ngSubmit)** custom event for listening to submission events.
@@ -538,3 +752,5 @@ We then proceed in using the alert component in our register template and add th
 ```html
 <app-alert *ngIf="showAlert" [color]="alertColor"> {{ alertMsg }} </app-alert>
 ```
+
+## Custom Validators
