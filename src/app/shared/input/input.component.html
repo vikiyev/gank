@@ -13,6 +13,11 @@
     lowercase letter and 1 number.
   </p>
 
+  <!--  password confirmation -->
+  <p *ngIf="control.errors?.noMatch" class="text-red-400">
+    Passwords do not match.
+  </p>
+
   <p *ngIf="control.errors?.required" class="text-red-400">Field is required</p>
   <p *ngIf="control.errors?.minlength" class="text-red-400">
     The value you inputted is
@@ -23,6 +28,10 @@
   <!-- Email -->
   <p *ngIf="control.errors?.email" class="text-red-400">
     You must enter a valid email.
+  </p>
+  <!-- Email is not unique -->
+  <p *ngIf="control.errors?.emailTaken" class="text-red-400">
+    Email taken. Please try another email.
   </p>
   <!-- Age -->
   <p *ngIf="control.errors?.min" class="text-red-400">Value too low.</p>

@@ -36,6 +36,7 @@ Stateless authentication with Firebase
   - [Form Submission](#form-submission)
   - [Alert Component](#alert-component)
   - [Custom Validators](#custom-validators)
+    - [Async validator](#async-validator)
 
 ## Tailwind Installation
 
@@ -754,3 +755,94 @@ We then proceed in using the alert component in our register template and add th
 ```
 
 ## Custom Validators
+
+Validators are classes which accept a form group to perform validation. We can use custom validators to validate if an email is already taken, or if passwords match against the confirmation password. We can add validators to form groups and by doing so, we will be given access to all form controls registered in a group.
+
+To be able to customize controls used by our validators, we can make the validator a factory function. Angular automatically manages errors on our behalf. It will automatically update the errors property based on the value returned by a validator function. We can manually set an error using the **Control.setErrors()** method.
+
+```typescript
+export class RegisterValidators {
+  static match(controlName: string, matchingControlName: string): ValidatorFn {
+    return (group: AbstractControl): ValidationErrors | null => {
+      const control = group.get(controlName);
+      const matchingControl = group.get(matchingControlName);
+
+      if (!control || !matchingControl) {
+        console.error("Form controls cannot be found in the form group");
+        return {
+          controlNotFound: false,
+        };
+      }
+
+      const error =
+        control.value === matchingControl.value ? null : { noMatch: true };
+      matchingControl.setErrors(error);
+
+      return error;
+    };
+  }
+}
+```
+
+We can then invoke the validator on the formgroup:
+
+```typescript
+registerForm = new FormGroup(
+  {
+    name: this.name,
+    email: this.email,
+    age: this.age,
+    password: this.password,
+    confirm_password: this.confirm_password,
+    phoneNumber: this.phoneNumber,
+  },
+  [RegisterValidators.match("password", "confirm_password")]
+);
+```
+
+```html
+<!--  password confirmation -->
+<p *ngIf="control.errors?.noMatch" class="text-red-400">
+  Passwords do not match.
+</p>
+```
+
+### Async validator
+
+Angular provides the **AsyncValidator** interface for asynchronous validators. For the validate method, if we return an object, then angular will assume that the control did not pass validation and will add the object to the errors property of the respective control. We will need to inject this class to other classes, so we need to annotate the class with Injectable and provide it to root.
+
+```typescript
+@Injectable({
+  providedIn: "root",
+})
+export class EmailTaken implements AsyncValidator {
+  constructor(private auth: AngularFireAuth) {}
+
+  validate = (control: AbstractControl): Promise<ValidationErrors | null> => {
+    // firebase will return an empty array if the email does not exist
+    return this.auth
+      .fetchSignInMethodsForEmail(control.value)
+      .then((response) => (response.length ? { emailTaken: true } : null));
+  };
+}
+```
+
+We pass it in as the third argument for our form control.
+
+```typescript
+export class RegisterComponent {
+  constructor(private auth: AuthService, private emailTaken: EmailTaken) {}
+
+  email = new FormControl(
+    '',
+    [Validators.required, Validators.email],
+    [this.emailTaken.validate]
+  );
+```
+
+```html
+<!-- Email is not unique -->
+<p *ngIf="control.errors?.emailTaken" class="text-red-400">
+  Email taken. Please try another email.
+</p>
+```
