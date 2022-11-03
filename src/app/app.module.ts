@@ -9,10 +9,16 @@ import { AppRoutingModule } from './app-routing.module';
 import { AppComponent } from './app.component';
 import { UserModule } from './user/user.module';
 import { NavComponent } from './nav/nav.component';
+import { HomeComponent } from './home/home.component';
+import { AboutComponent } from './about/about.component';
+import { VideoModule } from './video/video.module';
+import { ClipComponent } from './clip/clip.component';
+import { NotfoundComponent } from './notfound/notfound.component';
 
 @NgModule({
-  declarations: [AppComponent, NavComponent],
+  declarations: [AppComponent, NavComponent, HomeComponent, AboutComponent, ClipComponent, NotfoundComponent],
   imports: [
+    VideoModule,
     BrowserModule,
     AppRoutingModule,
     UserModule,

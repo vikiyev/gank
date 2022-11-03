@@ -37,6 +37,12 @@ Stateless authentication with Firebase
   - [Alert Component](#alert-component)
   - [Custom Validators](#custom-validators)
     - [Async validator](#async-validator)
+  - [Routing](#routing)
+    - [Registering Routes](#registering-routes)
+    - [Routing Module](#routing-module)
+    - [Redirecting](#redirecting)
+    - [Route Parameters](#route-parameters)
+    - [Route Guards](#route-guards)
 
 ## Tailwind Installation
 
@@ -845,4 +851,218 @@ export class RegisterComponent {
 <p *ngIf="control.errors?.emailTaken" class="text-red-400">
   Email taken. Please try another email.
 </p>
+```
+
+## Routing
+
+Routing is the concept of serving different resources based on a URL. Traditionally, routing is handled on the backend.
+
+### Registering Routes
+
+Every route in the app should be associated to a component.
+
+```typescript
+const routes: Routes = [
+  {
+    path: "",
+    component: HomeComponent,
+  },
+  {
+    path: "about",
+    component: AboutComponent,
+  },
+];
+```
+
+To render the component into the template, we use the `router-outlet` tags
+
+```html
+<app-nav></app-nav>
+
+<router-outlet></router-outlet>
+
+<app-auth-modal
+  *ngIf="!(auth.isAuthenticatedWithDelay$ | async)"
+></app-auth-modal>
+```
+
+To add navigation links, we use the **routerLink** directive. To add styling to links pointing to the current active path, we use the **routerLinkActive** directive to apply a class if the path is active. We can also apply the routerLinkActive to parent elements
+
+```html
+<li routerLinkActive="text-indigo-400">
+  <a
+    class="px-2"
+    routerLink="/about"
+    routerLinkActive="text-indigo-400"
+    [routerLinkActiveOptions]="{ exact: true }"
+    >About</a
+  >
+</li>
+```
+
+### Routing Module
+
+It is acceptable to have multiple routing modules in an app for easier management.
+
+```bash
+ng g module Video --routing
+```
+
+This time, the module is imported with the **forChild** function. We need to make sure to import this module into our app.module
+
+```typescript
+@NgModule({
+  imports: [RouterModule.forChild(routes)],
+  exports: [RouterModule]
+})
+```
+
+```typescript
+@NgModule({
+  declarations: [AppComponent, NavComponent, HomeComponent, AboutComponent],
+  imports: [
+    VideoModule,
+  ],
+})
+```
+
+### Redirecting
+
+We can add static data to a route by adding the **data** property to our route.
+
+```typescript
+const routes: Routes = [
+  {
+    path: "manage",
+    component: ManageComponent,
+    data: {
+      authOnly: true,
+    },
+  },
+];
+```
+
+The **ActivatedRoute** is a service we can inject to gather information about the currently route. The data property stores an observable that pushes data from the current route. However, the router does not make the data accessible to components or services defined outside the router-outlet.
+
+Since our auth service lives outside the router-outlet, we won't be able to access the data property. We can instead listen to events through our router by subscribing in the constructor of the auth service.
+
+```typescript
+// subscribe to router for NavigationEnd events
+this.router.events
+  .pipe(
+    filter((e) => e instanceof NavigationEnd),
+    map((e) => this.route.firstChild),
+    // subscribe to inner observable and retrieve the route data
+    // returns empty observable as fallback using nullish coalescing
+    switchMap((route) => route?.data ?? of({}))
+  )
+
+  .subscribe((data) => {
+    this.redirect = data.authOnly ?? false;
+  });
+```
+
+### Route Parameters
+
+We can use route parameters for generating pages based on the route:
+
+```typescript
+  {
+    path: 'clip/:id',
+    component: ClipComponent,
+  },
+```
+
+To retrieve a value from the URL, we can use **ActivatedRoute** params observable which pushes values whenever the route parameters changes.
+
+```typescript
+  ngOnInit(): void {
+    this.route.params.subscribe((params: Params) => {
+      this.id = params.id;
+    });
+  }
+```
+
+Query parameters allows us to update data while staying on the page such as filtering/sorting data.
+
+```typescript
+export class ManageComponent implements OnInit {
+  videoOrder = "1"; // 1 = asc 2 = desc
+
+  constructor(private router: Router, private route: ActivatedRoute) {}
+
+  ngOnInit(): void {
+    this.route.queryParams.subscribe((params: Params) => {
+      this.videoOrder = params.sort === "2" ? params.sort : "1";
+    });
+  }
+
+  sort(event: Event) {
+    const { value } = event.target as HTMLSelectElement;
+    this.router.navigateByUrl(`/manage?sort=${value}`);
+  }
+}
+```
+
+Another possible solution is by using Router **navigate** function wherein we construct a path and define query parameters:
+
+```typescript
+  sort(event: Event) {
+    const { value } = event.target as HTMLSelectElement;
+
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: {
+        sort: value,
+      },
+    });
+  }
+}
+```
+
+Alternatively, we can also bind the **queryParams** property in the template. This way, every time we navigate to the manage page, Angular will automatically add the query parameter of sort=1.
+
+```html
+<li>
+  <a
+    class="px-2"
+    routerLink="/manage"
+    routerLinkActive="text-indigo-400"
+    [routerLinkActiveOptions]="{ exact: true }"
+    [queryParams]="{ sort: 1 }"
+    >Manage</a
+  >
+</li>
+```
+
+To persist the selection upon page reload, we can use either the ngModel directive, or bind the select attribute to the videoOrder property.
+
+```html
+<select
+  (change)="sort($event)"
+  class="text-black px-8 text-xl outline-none appearance-none"
+>
+  <option value="1" [selected]="videoOrder === '1'">Recent Uploads</option>
+  <option value="2" [selected]="videoOrder === '2'">Oldest Uploads</option>
+</select>
+```
+
+### Route Guards
+
+A Guard is a function that will run before navigation is performed. We can use **AngularFireAuthGuard** as the argument for a route's canActivate property. We can then add the **redirectUnauthorizedTo** to the authGuardPipe property in our route data.
+
+```typescript
+const redirectUnauthorizedToHome = () => redirectUnauthorizedTo("/");
+
+const routes: Routes = [
+  {
+    path: "manage",
+    component: ManageComponent,
+    data: {
+      authOnly: true,
+      authGuardPipe: redirectUnauthorizedToHome,
+    },
+    canActivate: [AngularFireAuthGuard],
+  },
+];
 ```
