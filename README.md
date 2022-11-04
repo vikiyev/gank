@@ -44,7 +44,8 @@ Stateless authentication with Firebase
     - [Route Parameters](#route-parameters)
     - [Route Guards](#route-guards)
   - [Uploading Files](#uploading-files)
-    - [Drag and Drop Events](#drag-and-drop-events)
+    - [Drag and Drop File](#drag-and-drop-file)
+    - [Uploading Files to Firebase](#uploading-files-to-firebase)
 
 ## Tailwind Installation
 
@@ -1108,4 +1109,47 @@ export class EventBlockerDirective {
 </div>
 ```
 
-The drop event will pass along the file the user has dropped through the event object.
+The drop event will pass along the file the user has dropped through the event objec
+
+### Uploading Files to Firebase
+
+To upload files to firebase, we need to import **AngularFireStorageModule** to the app.module and the **AngularFireStorage** service.
+
+```typescript
+  uploadFile() {
+    this.showAlert = true;
+    this.alertColor = 'blue';
+    this.alertMsg = 'Your clip is being uploaded.';
+    this.inSubmission = true;
+
+    // generate the unique filename and its path
+    const clipFileName = uuid();
+    const clipPath = `clips/${clipFileName}.mp4`;
+
+    // upload the file
+    const task = this.storage.upload(clipPath, this.file);
+    task.percentageChanges().subscribe((progress) => {
+      this.percentage = (progress as number) / 100;
+    });
+  }
+```
+
+We need to update the firebase rules under Storage:
+
+```
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      // file size limits
+      allow read: if true;
+      // check if authenticated, limit to 25MB
+      allow write: if request.auth !=null &&
+      	request.resource.contentType == 'video/mp4' &&
+        request.resource.size < 25 * 1000 * 1000;
+    }
+  }
+}
+```
+
+### Upload Progress Observable
