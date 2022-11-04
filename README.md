@@ -43,6 +43,8 @@ Stateless authentication with Firebase
     - [Redirecting](#redirecting)
     - [Route Parameters](#route-parameters)
     - [Route Guards](#route-guards)
+  - [Uploading Files](#uploading-files)
+    - [Drag and Drop Events](#drag-and-drop-events)
 
 ## Tailwind Installation
 
@@ -1066,3 +1068,44 @@ const routes: Routes = [
   },
 ];
 ```
+
+## Uploading Files
+
+The client is responsible for transferring the file to the server while the server validates the upload, stores the file and exposes the API for the client to send the file. Firebase cloud storage provides hosting for user generated content which we will use for storing file uploads.
+
+### Drag and Drop File
+
+We need to disable the default behavior of the browser when dragging and dropping files. We can access the host element using the HostListener decorator.
+
+```typescript
+@Directive({
+  selector: "[app-event-blocker]",
+})
+export class EventBlockerDirective {
+  @HostListener("drop", ["$event"])
+  @HostListener("dragover", ["$event"])
+  public handleEvent(event: Event) {
+    event.preventDefault();
+  }
+}
+```
+
+```html
+<div
+  (dragend)="isDragover = false"
+  (dragover)="isDragover = true"
+  (dragenter)="isDragover = true"
+  (dragleave)="isDragover = false"
+  (mouseleave)="isDragover = false"
+  (drop)="storeFile($event)"
+  [ngClass]="{
+        'bg-indigo-400 border-indigo-400 border-solid': isDragover
+      }"
+  app-event-blocker
+  class="w-full px-10 py-40 rounded text-center cursor-pointer border border-dashed border-gray-400 transition duration-500 hover:text-white hover:bg-indigo-400 hover:border-indigo-400 hover:border-solid text-xl"
+>
+  <h5>Drop your file here (mp4 only!)</h5>
+</div>
+```
+
+The drop event will pass along the file the user has dropped through the event object.
