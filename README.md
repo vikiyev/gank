@@ -46,6 +46,11 @@ Stateless authentication with Firebase
   - [Uploading Files](#uploading-files)
     - [Drag and Drop File](#drag-and-drop-file)
     - [Uploading Files to Firebase](#uploading-files-to-firebase)
+    - [Storing the File Details into the Database](#storing-the-file-details-into-the-database)
+    - [Querying the Database](#querying-the-database)
+    - [Updating Clips](#updating-clips)
+    - [Deleting from the Database](#deleting-from-the-database)
+    - [Sorting with Behavior Subjects](#sorting-with-behavior-subjects)
 
 ## Tailwind Installation
 
@@ -1121,6 +1126,7 @@ To upload files to firebase, we need to import **AngularFireStorageModule** to t
     this.alertColor = 'blue';
     this.alertMsg = 'Your clip is being uploaded.';
     this.inSubmission = true;
+    this.showPercentage = true;
 
     // generate the unique filename and its path
     const clipFileName = uuid();
@@ -1131,6 +1137,24 @@ To upload files to firebase, we need to import **AngularFireStorageModule** to t
     task.percentageChanges().subscribe((progress) => {
       this.percentage = (progress as number) / 100;
     });
+    // check for upload state, using the last observable pushed
+    task
+      .snapshotChanges()
+      .pipe(last())
+      .subscribe({
+        next: (snapshot) => {
+          this.alertColor = 'green';
+          this.alertMsg = 'Success! Your clip has now been uploaded.';
+          this.showPercentage = false;
+        },
+        error: (error) => {
+          this.alertColor = 'red';
+          this.alertMsg = 'Upload Failed! Please try again later.';
+          this.inSubmission = true;
+          this.showPercentage = false;
+          console.error(error);
+        },
+      });
   }
 ```
 
@@ -1152,4 +1176,291 @@ service firebase.storage {
 }
 ```
 
-### Upload Progress Observable
+### Storing the File Details into the Database
+
+To store the information of the user who uploaded the file, we can inject the **AngularFireAuth** service. We also need to create a reference to the file, which should point to the file.
+
+```typescript
+export class UploadComponent implements OnInit {
+  user: firebase.User | null = null;
+  task?: AngularFireUploadTask;
+
+  constructor(
+    private storage: AngularFireStorage,
+    private auth: AngularFireAuth,
+    private clipsService: ClipService
+  ) {
+    this.auth.user.subscribe((user) => (this.user = user));
+  }
+
+  uploadFile()
+    this.task = this.storage.upload(clipPath, this.file);
+    const clipRef = this.storage.ref(clipPath);
+
+    this.task.percentageChanges().subscribe((progress) => {
+      this.percentage = (progress as number) / 100;
+    });
+    // check for upload state, using the last observable pushed
+    this.task
+      .snapshotChanges()
+      .pipe(
+        last(),
+        switchMap(() => clipRef.getDownloadURL())
+      )
+      .subscribe({
+        next: (url) => {
+          // clip information
+          const clip = {
+            uid: this.user?.uid,
+            displayName: this.user?.displayName,
+            title: this.title.value,
+            fileName: `${clipFileName}.mp4`,
+            url: url,
+            timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+          };
+          this.clipsService.createClip(clip);
+        },,
+      });
+  }
+}
+```
+
+### Querying the Database
+
+To retrieve the list of clips uploaded, we can add the following method to our clips service.
+
+```typescript
+  getUserClips() {
+    return this.auth.user.pipe(
+      switchMap((user) => {
+        if (!user) {
+          return of([]);
+        }
+
+        const query = this.clipsCollection.ref.where('uid', '==', user.uid);
+        return query.get();
+      }),
+      map((snapshot) => (snapshot as QuerySnapshot<IClip>).docs)
+    );
+  }
+```
+
+```typescript
+export class ManageComponent implements OnInit {
+  clips: IClip[] = [];
+
+  constructor(
+    private router: Router,
+    private route: ActivatedRoute,
+    private clipService: ClipService
+  ) {}
+
+  ngOnInit(): void {
+    this.route.queryParams.subscribe((params: Params) => {
+      this.videoOrder = params.sort === '2' ? params.sort : '1';
+    });
+
+    this.clipService.getUserClips().subscribe((docs) => {
+      // the observable will always push a fresh list of docs
+      // we should reset to prevent dupes
+      this.clips = [];
+
+      docs.forEach((doc) => {
+        this.clips.push({
+          docID: doc.id,
+          ...doc.data(),
+        });
+      });
+    });
+  }
+```
+
+### Updating Clips
+
+We create a new method in our ClipService for updating clips in the database.
+
+```typescript
+  updateClip(id: string, title: string) {
+    return this.clipsCollection.doc(id).update({
+      title: title,
+    });
+  }
+```
+
+```typescript
+  async submit() {
+    // update the properties for the alert box and form
+    this.inSubmission = true;
+    this.showAlert = true;
+    this.alertColor = 'blue';
+    this.alertMsg = 'Updating Clip.';
+
+    // send data to firebase
+    try {
+      await this.clipService.updateClip(this.clipID.value, this.title.value);
+    } catch (e) {
+      console.error(e);
+      this.inSubmission = false;
+      this.alertColor = 'red';
+      this.alertMsg = 'Something went wrong. Try again later.';
+      return;
+    }
+
+    this.inSubmission = false;
+    this.alertColor = 'green';
+    this.alertMsg = 'Success!';
+  }
+```
+
+To trigger an update, we need to send the data back to the parent (manage) component from the child (edit). The **Output** decorator allows a parent component to listen to an event. We can generate a custom event using **EventEmitter**.
+
+```typescript
+export class EditComponent implements OnInit, OnDestroy, OnChanges {
+  @Input() activeClip: IClip | null = null;
+  @Output() update = new EventEmitter();
+
+  async submit() {
+    if (!this.activeClip) {
+      return;
+    }
+    // send data to firebase
+    try {
+      await this.clipService.updateClip(this.clipID.value, this.title.value);
+    } catch (e) {
+      console.error(e);
+      return;
+    }
+
+    this.activeClip.title = this.title.value;
+    this.update.emit(this.activeClip);
+  }
+}
+```
+
+Manage template:
+
+```html
+<app-edit [activeClip]="activeClip" (update)="update($event)"></app-edit>
+```
+
+Manage component:
+
+```typescript
+  // update edited clip title
+  update($event: IClip) {
+    this.clips.forEach((el, idx) => {
+      if (el.docID == $event.docID) {
+        this.clips[idx].title = $event.title;
+      }
+    });
+  }
+```
+
+### Deleting from the Database
+
+For deleting, we need to delete the file itself - in the storage and the document in the database. Once removed, we will also need to remove the clip from the page. Before doing so, we need to modify the storage security rules.
+
+```
+      // allow delete if user is authenticated
+      allow delete: if request.auth !=null;
+```
+
+We then add the method for deleting to our service, which uses the AngularFirestore and AngularFireStorage services.
+
+```typescript
+export class ClipService {
+  public clipsCollection: AngularFirestoreCollection<IClip>;
+
+  constructor(
+    private db: AngularFirestore,
+    private auth: AngularFireAuth,
+    private storage: AngularFireStorage
+  ) {
+    this.clipsCollection = db.collection("clips");
+  }
+
+  async deleteClip(clip: IClip) {
+    // create the reference to the file to be deleted
+    const clipRef = this.storage.ref(`clips/${clip.fileName}`);
+
+    // delete the clip from the storage
+    await clipRef.delete();
+    // delete the document
+    await this.clipsCollection.doc(clip.docID).delete();
+  }
+}
+```
+
+```typescript
+  deleteClip($event: Event, clip: IClip) {
+    $event.preventDefault();
+    this.clipService.deleteClip(clip);
+    // remove deleted clip from the array
+    this.clips.forEach((el, idx) => {
+      if (el.docID == clip.docID) {
+        this.clips.splice(idx, 1);
+      }
+    });
+  }
+```
+
+### Sorting with Behavior Subjects
+
+BehaviorSubject can act both as an observer and observable at the same time. A subject can push a value while being subscribed to an observable. In our case, whenever the videoOrder property is updated, we push a new value to our observable. We pass this sort$ object into the getUserClips method of the Clip Service.
+
+```typescript
+export class ManageComponent implements OnInit {
+  videoOrder = '1'; // 1 = asc 2 = desc
+  sort$: BehaviorSubject<string>;
+
+  constructor() {
+    this.sort$ = new BehaviorSubject(this.videoOrder);
+    // this.sort$.subscribe(console.log);
+    // this.sort$.next('test');
+  }
+
+  ngOnInit(): void {
+    this.route.queryParams.subscribe((params: Params) => {
+      this.videoOrder = params.sort === '2' ? params.sort : '1';
+      this.sort$.next(this.videoOrder);
+    });
+
+
+    this.clipService.getUserClips(this.sort$).subscribe((docs) => {
+      // the observable will always push a fresh list of docs
+      // we should reset to prevent dupes
+      this.clips = [];
+
+      docs.forEach((doc) => {
+        this.clips.push({
+          docID: doc.id,
+          ...doc.data(),
+        });
+      });
+    });
+  }
+```
+
+In the Clip Service, we subscribe to both the user, and the new sort observable at the same time with the **combineLatest** operator. Whenever either observable pushes a value, the combineLatest operator will push it onto the pipeline.
+
+```typescript
+  getUserClips(sort$: BehaviorSubject<string>) {
+    return combineLatest([this.auth.user, sort$]).pipe(
+      switchMap((values) => {
+        // destructure from array of observables
+        const [user, sort] = values;
+
+        if (!user) {
+          return of([]);
+        }
+
+        const query = this.clipsCollection.ref
+          .where('uid', '==', user.uid)
+          .orderBy('timestamp', sort === '1' ? 'desc' : 'asc');
+        return query.get();
+      }),
+      // return the docs array
+      map((snapshot) => (snapshot as QuerySnapshot<IClip>).docs)
+    );
+  }
+```

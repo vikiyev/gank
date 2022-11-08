@@ -1,6 +1,10 @@
 import { Component, OnInit } from '@angular/core';
 import { Router, ActivatedRoute, Params } from '@angular/router';
+import { BehaviorSubject } from 'rxjs';
 
+import { ClipService } from 'src/app/services/clip.service';
+import { ModalService } from 'src/app/services/modal.service';
+import IClip from 'src/app/models/clip.model';
 @Component({
   selector: 'app-manage',
   templateUrl: './manage.component.html',
@@ -8,12 +12,38 @@ import { Router, ActivatedRoute, Params } from '@angular/router';
 })
 export class ManageComponent implements OnInit {
   videoOrder = '1'; // 1 = asc 2 = desc
+  clips: IClip[] = [];
+  activeClip: IClip | null = null;
+  sort$: BehaviorSubject<string>;
 
-  constructor(private router: Router, private route: ActivatedRoute) {}
+  constructor(
+    private router: Router,
+    private route: ActivatedRoute,
+    private clipService: ClipService,
+    private modal: ModalService
+  ) {
+    this.sort$ = new BehaviorSubject(this.videoOrder);
+    // this.sort$.subscribe(console.log);
+    // this.sort$.next('test');
+  }
 
   ngOnInit(): void {
     this.route.queryParams.subscribe((params: Params) => {
       this.videoOrder = params.sort === '2' ? params.sort : '1';
+      this.sort$.next(this.videoOrder);
+    });
+
+    this.clipService.getUserClips(this.sort$).subscribe((docs) => {
+      // the observable will always push a fresh list of docs
+      // we should reset to prevent dupes
+      this.clips = [];
+
+      docs.forEach((doc) => {
+        this.clips.push({
+          docID: doc.id,
+          ...doc.data(),
+        });
+      });
     });
   }
 
@@ -26,6 +56,32 @@ export class ManageComponent implements OnInit {
       queryParams: {
         sort: value,
       },
+    });
+  }
+
+  openModal($event: Event, clip: IClip) {
+    $event.preventDefault();
+    this.activeClip = clip;
+    this.modal.toggleModal('editClip');
+  }
+
+  // update edited clip title
+  update($event: IClip) {
+    this.clips.forEach((el, idx) => {
+      if (el.docID == $event.docID) {
+        this.clips[idx].title = $event.title;
+      }
+    });
+  }
+
+  deleteClip($event: Event, clip: IClip) {
+    $event.preventDefault();
+    this.clipService.deleteClip(clip);
+    // remove deleted clip from the array
+    this.clips.forEach((el, idx) => {
+      if (el.docID == clip.docID) {
+        this.clips.splice(idx, 1);
+      }
     });
   }
 }
