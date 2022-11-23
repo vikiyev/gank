@@ -2,6 +2,8 @@
 
 Features:
 Stateless authentication with Firebase
+Integration with Firestore database
+Generation of video thumbnails with Rust, Web Assembly, and FFmpeg.
 
 - [Gank](#gank)
   - [Tailwind Installation](#tailwind-installation)
@@ -51,6 +53,10 @@ Stateless authentication with Firebase
     - [Updating Clips](#updating-clips)
     - [Deleting from the Database](#deleting-from-the-database)
     - [Sorting with Behavior Subjects](#sorting-with-behavior-subjects)
+  - [FFmpeg](#ffmpeg)
+    - [Initializing FFmpeg](#initializing-ffmpeg)
+    - [Generating Screenshots](#generating-screenshots)
+    - [Bypassing Angular Sanitation](#bypassing-angular-sanitation)
 
 ## Tailwind Installation
 
@@ -1463,4 +1469,193 @@ In the Clip Service, we subscribe to both the user, and the new sort observable 
       map((snapshot) => (snapshot as QuerySnapshot<IClip>).docs)
     );
   }
+```
+
+## FFmpeg
+
+We use `ffmpeg.wasm` to generate screenshots from videos. We will need the core and FFmpeg packages `@ffmpeg/ffmpeg @ffmpeg/core`. The core package exports ffmpeg as a web assembly file. The ffmpeg package exposes a javascript api for interacting with ffmpeg. The files are stored in `node_modules/@ffmpeg/core/dist` which we need to include in Angular. We need to add the following options to angular.json.
+
+```json
+      "architect": {
+            "assets": [
+              {
+                "input": "node_modules/@ffmpeg/core/dist",
+                "output": "node_modules/@ffmpeg/core/dist",
+                "glob": "*"
+              }
+            ],
+```
+
+We also need to install type definitions for node `@types/node`. We need to import the type definitions and update the project typescript configuration as well.
+
+```json
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./out-tsc/app",
+    "types": ["node"]
+  },
+  "files": ["src/main.ts", "src/polyfills.ts"],
+  "include": ["src/**/*.d.ts"]
+}
+```
+
+Web workers are scripts that run on a different thread than the main application. Web workers however does not have access to the document. SharedArrayBuffers are objects shared between the main thread and web workers. To enable support for **SharedArrayBuffer**, we add the following in our angular.json:
+
+```json
+        "serve": {
+          "options": {
+            "headers": {
+              "Cross-Origin-Opener-Policy": "same-origin",
+              "Cross-Origin-Embedder-Policy": "require-corp"
+            }
+          }
+```
+
+### Initializing FFmpeg
+
+We start by creating a service for lazy loading ffmpeg. The **createFFmpeg()** factory function creates an instance but does not load the wasm file. Since ffmpeg is a large file, we need to initialize it without blocking the main thread.
+
+```typescript
+export class FfmpegService {
+  public isReady = false;
+  private ffmpeg;
+
+  constructor() {
+    this.ffmpeg = createFFmpeg({ log: true });
+  }
+
+  async init() {
+    // check if ffmpeg has already loaded
+    if (this.isReady) {
+      return;
+    }
+
+    await this.ffmpeg.load();
+    this.isReady = true;
+  }
+}
+```
+
+We then initialize ffmpeg into the upload component. We also update the template so that the forms are unavailable while ffmpeg is still being initialized.
+
+```typescript
+export class UploadComponent implements OnDestroy {
+  constructor(public ffmpegService: FfmpegService) {
+    this.ffmpegService.init();
+  }
+}
+```
+
+```html
+<ng-container>
+  <span
+    *ngIf="!ffmpegService.isReady; else uploadEditorCtr"
+    class="material-symbols-outlined text-center text-6xl p-8 animate-spin"
+  >
+    settings
+  </span>
+</ng-container>
+
+<ng-template #uploadEditorCtr>
+  <!-- Upload Dropbox -->
+  <ng-container *ngIf="!nextStep; else uploadFormCtr"> </ng-container>
+
+  <!-- Video Editor -->
+  <ng-template #uploadFormCtr> </ng-template>
+</ng-template>
+```
+
+### Generating Screenshots
+
+We first need to save the video file to memory. Before we can send the file, it needs to be converted to binary data. FFmpeg provides the **fetchFile()** function for converting to binary and **FS()** for accessing the independent memory system.
+
+The ffmpeg command line tools comes with **ffmpeg** for processing video and audio files. **ffplay** is used for playing media files and **ffprobe** for reading files such as metadata. For generating screenshots, we use ffmpeg. We can use the **run()** function and pass [options](https://www.ffmpeg.org/ffmpeg.html#Options).
+
+After generating the screenshots, we need to create the URL's. We can do so by converting from a binary to a string. We can do so using blobs.
+
+```typescript
+  async storeFile($event: Event) {
+    // check for drag and drop, otherwise use input fallback
+
+    // process the file
+    this.screenshots = await this.ffmpegService.getScreenshots(this.file);
+  }
+```
+
+```typescript
+  async getScreenshots(file: File) {
+    // convert to binary
+    const data = await fetchFile(file);
+
+    // store to memory
+    this.ffmpeg.FS('writeFile', file.name, data);
+
+    // pick timestamps for generating images
+    const seconds = [1, 2, 3];
+    const commands: string[] = [];
+
+    seconds.forEach((second) => {
+      commands.push(
+        // input
+        '-i',
+        file.name,
+        // output options
+        // grab screenshot from timestamp
+        '-ss',
+        `00:00:0${second}`,
+        // configure number of frames (1)
+        '-frames:v',
+        '1',
+        // resize image and maintain aspect ratio
+        '-filter:v',
+        'scale=510:-1',
+        // output
+        `output_0${second}.png`
+      );
+    });
+
+    await this.ffmpeg.run(...commands);
+
+    const screenshots: string[] = [];
+
+    seconds.forEach((second) => {
+      // grab the file from the isolated file system
+      const screenshotFile = this.ffmpeg.FS(
+        'readFile',
+        `output_0${second}.png`
+      );
+      // convert binary to URL using blobs
+      const screenshotBlob = new Blob([screenshotFile.buffer], {
+        type: 'image/png',
+      });
+      const screenshotUrl = URL.createObjectURL(screenshotBlob);
+      screenshots.push(screenshotUrl);
+    });
+
+    return screenshots;
+  }
+```
+
+### Bypassing Angular Sanitation
+
+Hyperlinks and resources are sanitized by angular automatically. For bypassing sanitation, we can use a custom pipe. The **DomSanitizer** class can be used for bypassing sanitation.
+
+```typescript
+export class SafeURLPipe implements PipeTransform {
+  constructor(private sanitizer: DomSanitizer) {}
+
+  transform(value: string) {
+    return this.sanitizer.bypassSecurityTrustUrl(value);
+  }
+}
+```
+
+```html
+<div
+  *ngFor="let screenshot of screenshots"
+  class="border-8 cursor-pointer border-green-400"
+>
+  <img [src]="screenshot | safeURL" />
+</div>
 ```

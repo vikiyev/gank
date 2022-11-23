@@ -1,10 +1,5 @@
 import { Component, OnDestroy } from '@angular/core';
-import {
-  FormControl,
-  UntypedFormControl,
-  UntypedFormGroup,
-  Validators,
-} from '@angular/forms';
+import { FormControl, UntypedFormGroup, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import {
   AngularFireStorage,
@@ -15,6 +10,7 @@ import { v4 as uuid } from 'uuid';
 import { last, switchMap } from 'rxjs/operators';
 import firebase from 'firebase/compat/app';
 
+import { FfmpegService } from 'src/app/services/ffmpeg.service';
 import { ClipService } from 'src/app/services/clip.service';
 
 @Component({
@@ -35,6 +31,7 @@ export class UploadComponent implements OnDestroy {
   showPercentage = false;
   user: firebase.User | null = null;
   task?: AngularFireUploadTask;
+  screenshots: string[] = [];
 
   title = new FormControl('', {
     validators: [Validators.required, Validators.minLength(3)],
@@ -48,9 +45,11 @@ export class UploadComponent implements OnDestroy {
     private storage: AngularFireStorage,
     private auth: AngularFireAuth,
     private clipsService: ClipService,
-    private router: Router
+    private router: Router,
+    public ffmpegService: FfmpegService
   ) {
     this.auth.user.subscribe((user) => (this.user = user));
+    this.ffmpegService.init();
   }
 
   ngOnDestroy(): void {
@@ -58,7 +57,7 @@ export class UploadComponent implements OnDestroy {
     this.task?.cancel();
   }
 
-  storeFile($event: Event) {
+  async storeFile($event: Event) {
     this.isDragover = false;
     // console.log($event)
 
@@ -71,6 +70,10 @@ export class UploadComponent implements OnDestroy {
     if (!this.file || this.file.type !== 'video/mp4') {
       return;
     }
+
+    // process the file
+    this.screenshots = await this.ffmpegService.getScreenshots(this.file);
+
     // console.log(this.file);
     this.title.setValue(this.file.name.replace(/\.[^/.]+$/, ''));
     this.nextStep = true;
