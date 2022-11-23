@@ -63,6 +63,7 @@ Generation of video thumbnails with Rust, Web Assembly, and FFmpeg.
     - [CORS Issues](#cors-issues)
   - [Resolving Data with a Guard](#resolving-data-with-a-guard)
   - [Rendering Videos](#rendering-videos)
+  - [Lazy Loading](#lazy-loading)
 
 ## Tailwind Installation
 
@@ -1962,4 +1963,16 @@ We can import the styles for the video player. By default, angular encapsulates 
   encapsulation: ViewEncapsulation.None
 })
 export class ClipComponent implements OnInit {
+```
+
+## Lazy Loading
+
+Lazy loading is a webpack features to optimize an application. A chunk is a piece of our application and by default, webpack bundles into as few files as possible. We can configure webpack to customize this behavior. We can lazy load the entire video module. This module will only be loaded when the user visits the manage or upload page. We need to add the following in our app-routing-module:
+
+```typescript
+  {
+    path: '',
+    loadChildren: async () =>
+      (await import('./video/video.module')).VideoModule,
+  },
 ```

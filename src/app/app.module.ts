@@ -12,7 +12,6 @@ import { UserModule } from './user/user.module';
 import { NavComponent } from './nav/nav.component';
 import { HomeComponent } from './home/home.component';
 import { AboutComponent } from './about/about.component';
-import { VideoModule } from './video/video.module';
 import { ClipComponent } from './clip/clip.component';
 import { NotfoundComponent } from './notfound/notfound.component';
 import { ClipsListComponent } from './clips-list/clips-list.component';
@@ -30,7 +29,6 @@ import { FbTimestampPipe } from './pipes/fb-timestamp.pipe';
     FbTimestampPipe,
   ],
   imports: [
-    VideoModule,
     BrowserModule,
     AppRoutingModule,
     UserModule,

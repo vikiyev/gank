@@ -27,16 +27,20 @@
       <!-- Image -->
       <a href="#">
         <img
+          crossorigin
           class="card-img-top rounded-tl-2xl w-full"
-          src="assets/img/1.jpg"
+          [src]="clip.screenshotURL"
         />
       </a>
 
       <!-- Body -->
       <div class="p-6 text-2xl">
         <!-- Link -->
-        <a href="#" class="font-bold mb-2">{{ clip.title }}</a>
+        <a [routerLink]="['/', 'clip', clip.docID]" class="font-bold mb-2">{{
+          clip.title
+        }}</a>
         <a
+          (click)="copyToClipboard($event, clip.docID)"
           href="#"
           class="bg-gray-400 text-white px-2 py-1 ml-2 text-sm rounded"
         >
@@ -51,14 +55,14 @@
           href="#"
           class="flex-1 p-2 border-right border-r-2 border-gray-700 transition hover:text-indigo-400"
         >
-          <span class="material-icons text-base">build</span>
+          <span class="material-symbols-outlined text-base">build</span>
         </a>
         <a
           (click)="deleteClip($event, clip)"
           href="#"
           class="flex-1 p-2 rounded-br-2xl transition hover:text-indigo-400"
         >
-          <span class="material-icons text-base">delete</span>
+          <span class="material-symbols-outlined text-base">delete</span>
         </a>
       </div>
     </div>
