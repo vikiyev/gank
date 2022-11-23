@@ -59,6 +59,10 @@ Generation of video thumbnails with Rust, Web Assembly, and FFmpeg.
     - [Bypassing Angular Sanitation](#bypassing-angular-sanitation)
     - [Selecting a Screenshot and Uploading to Firebase](#selecting-a-screenshot-and-uploading-to-firebase)
     - [Deleting Screenshots from Database and Storage](#deleting-screenshots-from-database-and-storage)
+  - [Infinite Scrolling and Fetching Videos](#infinite-scrolling-and-fetching-videos)
+    - [CORS Issues](#cors-issues)
+  - [Resolving Data with a Guard](#resolving-data-with-a-guard)
+  - [Rendering Videos](#rendering-videos)
 
 ## Tailwind Installation
 
@@ -1768,4 +1772,194 @@ If a user deletes a clip, its related screenshot should be deleted too.
     // delete the document
     await this.clipsCollection.doc(clip.docID).delete();
   }
+```
+
+## Infinite Scrolling and Fetching Videos
+
+We can implement infinite scrolling for the homepage. Loading additional clips can be triggered when the user scrollls to the bottom of the page.
+
+```typescript
+export class ClipsListComponent implements OnInit, OnDestroy {
+  constructor(public clipService: ClipService) {
+    this.clipService.getClips();
+  }
+
+  ngOnInit(): void {
+    window.addEventListener("scroll", this.handleScroll);
+  }
+
+  ngOnDestroy(): void {
+    window.removeEventListener("scroll", this.handleScroll);
+  }
+
+  handleScroll = () => {
+    // offsetHeight = height of whole page
+    // innerHeight = height of the viewable area
+    // scrollTop = distance from the top of the page to the top of the viewable area
+    const { scrollTop, offsetHeight } = document.documentElement;
+    const { innerHeight } = window;
+
+    // check if innerHeight + scrollTop = offsetHeight
+    const bottomOfWindow = Math.round(scrollTop) + innerHeight === offsetHeight;
+
+    if (bottomOfWindow) {
+      this.clipService.getClips();
+    }
+  };
+}
+```
+
+Inside the clip service, we need to create a query for retrieving a list of clips. Firebase provides the function for skipping results with **startAfter()**.
+
+```typescript
+  async getClips() {
+    if (this.pendingRequest) {
+      return;
+    }
+
+    this.pendingRequest = true;
+
+    let query = this.clipsCollection.ref.orderBy('timestamp', 'desc').limit(6);
+
+    const { length } = this.pageClips;
+    if (length) {
+      // grab the last clip from the current array
+      const lastDocID = this.pageClips[length - 1].docID;
+      const lastDoc = await this.clipsCollection
+        .doc(lastDocID)
+        .get()
+        .toPromise();
+
+      // skip the documents before the last
+      query = query.startAfter(lastDoc);
+    }
+    const snapshot = await query.get();
+    snapshot.forEach((doc) => {
+      this.pageClips.push({
+        docID: doc.id,
+        ...doc.data(),
+      });
+    });
+
+    this.pendingRequest = false;
+  }
+```
+
+### CORS Issues
+
+Resources are files downloaded by the browser such as videos, images, fonts, web pages, general asset files.
+
+```html
+<img
+  class="card-img-top rounded-tl-2xl w-full"
+  [src]="clip.screenshotURL"
+  crossorigin
+/>
+```
+
+We can use the Access-Control-Allow-Origin header to allow images to load from firebase. To do so, we need to enable them in Google Cloud. Google Cloud can read a cors.json file for configuring its cors settings.
+
+```json
+[
+  {
+    "origin": ["*"],
+    "responseHeader": ["Content-Type"],
+    "method": ["GET"],
+    "maxAgeSeconds": 3600
+  }
+]
+```
+
+Using `gsutil`, we can upload the configuration settings. Or we can also use the cloud shell. [guide](https://stackoverflow.com/questions/37760695/firebase-storage-and-access-control-allow-origin/58613527#58613527)
+
+```bash
+gsutil cors set cors.json gs://ng-gank.appspot.com
+```
+
+## Resolving Data with a Guard
+
+We can use Resolvers to retrieve data from the database. The router will run the **resolve()** function before loading the component whenever the user visits the route. The resolve() function will return a document from the clips collection and can be access through the property's name, in this case: clip.
+
+```typescript
+  resolve(route: ActivatedRouteSnapshot, state: RouterStateSnapshot) {
+    return this.clipsCollection
+      .doc(route.params.id)
+      .get()
+      .pipe(
+        map((snapshot) => {
+          const data = snapshot.data();
+
+          // redirect to homepage if no data was found
+          if (!data) {
+            this.router.navigate(['/']);
+            return null;
+          }
+
+          return data;
+        })
+      );
+  }
+```
+
+We need to register the resolver to our route manually.
+
+```typescript
+const routes: Routes = [
+  {
+    path: "clip/:id",
+    component: ClipComponent,
+    resolve: {
+      clip: ClipService,
+    },
+  },
+];
+```
+
+## Rendering Videos
+
+To render videos, we use the libraries `video.js @types/video.js @videojs/themes`. We can select the template element into the class file with the **@ViewChild** decorator.
+
+```html
+<video #videoPlayer controls class="video-js vjs-theme-forest mx-auto">
+  <source src="assets/video/hero.webm" type="video/webm" />
+</video>
+```
+
+Whenever we select an element with ViewChild, the property will store an instance of the **ElementRef** class. By setting the static property to true, the ViewChild decorator will update the property with the element before ngOnInit is called.
+
+```typescript
+export class ClipComponent implements OnInit {
+  @ViewChild("videoPlayer", { static: true }) target?: ElementRef;
+  player?: videojs.Player;
+  clip?: IClip;
+
+  constructor(private route: ActivatedRoute) {}
+
+  ngOnInit(): void {
+    // initialize player
+    this.player = videojs(this.target?.nativeElement);
+
+    this.route.data.subscribe((data) => {
+      this.clip = data.clip as IClip;
+      this.player?.src({
+        src: this.clip.url,
+        type: "video/mp4",
+      });
+    });
+  }
+}
+```
+
+We can import the styles for the video player. By default, angular encapsulates CSS to a single component. We can turn off view encapsulation by configuring the component options.
+
+```scss
+@import "~video.js/dist/video-js.css";
+@import "~@videojs/themes/dist/forest/index.css";
+```
+
+```typescript
+@Component({
+  encapsulation: ViewEncapsulation.None
+})
+export class ClipComponent implements OnInit {
 ```
