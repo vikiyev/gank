@@ -1,9 +1,10 @@
 # Gank
 
 Features:
+Form validators
 Stateless authentication with Firebase
 Integration with Firestore database
-Generation of video thumbnails with Rust, Web Assembly, and FFmpeg.
+Video playback and screenshot generation with FFmpeg
 
 - [Gank](#gank)
   - [Tailwind Installation](#tailwind-installation)
@@ -64,6 +65,7 @@ Generation of video thumbnails with Rust, Web Assembly, and FFmpeg.
   - [Resolving Data with a Guard](#resolving-data-with-a-guard)
   - [Rendering Videos](#rendering-videos)
   - [Lazy Loading](#lazy-loading)
+  - [Deployment](#deployment)
 
 ## Tailwind Installation
 
@@ -1975,4 +1977,61 @@ Lazy loading is a webpack features to optimize an application. A chunk is a piec
     loadChildren: async () =>
       (await import('./video/video.module')).VideoModule,
   },
+```
+
+## Deployment
+
+Angular Budgets is a feature wherein filesize is checked against a threshold. We can modify this in angular.json
+
+```json
+"budgets": [
+  {
+    "type": "initial",
+    "maximumWarning": "5mb",
+    "maximumError": "5mb"
+  },
+  {
+    "type": "anyComponentStyle",
+    "maximumWarning": "50kb",
+    "maximumError": "50kb"
+  }
+],
+```
+
+We also configured our firestore database rules:
+
+```
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+    // allow anyone to read the database
+		allow read: if true;
+    // allow overwrite permissions only to owners
+    allow write: if request.auth.uid == resource.data.uid;
+
+    // allow authenticated users to create resource
+    allow create: if request.auth.uid != null;
+
+    // allow delete only to owners
+    allow delete: if request.auth.uid == resource.data.uid;
+    }
+  }
+}
+```
+
+The angular app is deployed in Vercel. Since our app uses ffmpeg, we will need additional configuration for the headers. Vercel allows us to modify the headers through `vercel.json`
+
+```json
+{
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "Cross-Origin-Opener-Policy", "value": "same-origin" },
+        { "key": "Cross-Origin-Embedder-Policy", "value": "require-corp" }
+      ]
+    }
+  ]
+}
 ```
