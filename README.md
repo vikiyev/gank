@@ -57,6 +57,8 @@ Generation of video thumbnails with Rust, Web Assembly, and FFmpeg.
     - [Initializing FFmpeg](#initializing-ffmpeg)
     - [Generating Screenshots](#generating-screenshots)
     - [Bypassing Angular Sanitation](#bypassing-angular-sanitation)
+    - [Selecting a Screenshot and Uploading to Firebase](#selecting-a-screenshot-and-uploading-to-firebase)
+    - [Deleting Screenshots from Database and Storage](#deleting-screenshots-from-database-and-storage)
 
 ## Tailwind Installation
 
@@ -1658,4 +1660,112 @@ export class SafeURLPipe implements PipeTransform {
 >
   <img [src]="screenshot | safeURL" />
 </div>
+```
+
+### Selecting a Screenshot and Uploading to Firebase
+
+We can create a new property in the class file which corresponds to the selected screenshot. We also need to add a click event on the div tag.
+
+```html
+<div
+  *ngFor="let screenshot of screenshots"
+  class="border-8 cursor-pointer"
+  (click)="selectedScreenshot = screenshot"
+  [ngClass]="{
+                'border-green-400': screenshot === selectedScreenshot,
+                'border-transparent': screenshot !== selectedScreenshot
+              }"
+>
+  <img [src]="screenshot | safeURL" />
+</div>
+```
+
+We need to update our firebase rules to allow images.
+
+```
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      // file size limits
+      allow read: if true;
+      // check if authenticated, limit to 25MB
+      allow write: if request.auth !=null &&
+      	(
+        request.resource.contentType == 'video/mp4' ||
+        request.resource.contentType == 'image/png'
+        ) &&
+        request.resource.size < 25 * 1000 * 1000;
+      // allow delete if user is authenticated
+      allow delete: if request.auth !=null;
+
+    }
+  }
+}
+```
+
+Firebase accepts blobs, however the URL's created by our app point to the system memory. The function will create a blob from the URL. The component does not have access to the blob object itself, so we will need to create a function to grab a blob.
+
+```typescript
+  async blobFromURL(url: string) {
+    const response = await fetch(url);
+    const blob = await response.blob();
+
+    return blob;
+  }
+```
+
+```typescript
+export class UploadComponent implements OnDestroy {
+  screenshotTask?: AngularFireUploadTask;
+
+  async uploadFile() {
+    // grab the blob
+    const screenshotBlob = await this.ffmpegService.blobFromURL(
+      this.selectedScreenshot
+    );
+
+    // define firebase path and filename
+    const screenshotPath = `screenshots/${clipFileName}.png`;
+
+    // upload thumbnail
+    this.screenshotTask = this.storage.upload(screenshotPath, screenshotBlob);
+}
+
+```
+
+We need to also store the URL of our thumbnail to firebase. The **forkjoin** operator accepts an array of observables. Values are not pushed into the subscriber until all observables have completed. Upon completion, the latest values pushed by each observable is streamed to the subscriber.
+
+```typescript
+// check for upload state, using the last observable pushed
+forkJoin([this.task.snapshotChanges(), this.screenshotTask.snapshotChanges()])
+  .pipe(
+    switchMap(() =>
+      forkJoin([clipRef.getDownloadURL(), screenshotRef.getDownloadURL()])
+    )
+  )
+  .subscribe({
+
+    },
+  });
+```
+
+### Deleting Screenshots from Database and Storage
+
+If a user deletes a clip, its related screenshot should be deleted too.
+
+```typescript
+  async deleteClip(clip: IClip) {
+    // create the reference to the file to be deleted
+    const clipRef = this.storage.ref(`clips/${clip.fileName}`);
+    const screenshotRef = this.storage.ref(
+      `screenshots/${clip.screenshotFileName}`
+    );
+
+    await clipRef.delete();
+    await screenshotRef.delete();
+
+    // delete the document
+    await this.clipsCollection.doc(clip.docID).delete();
+  }
 ```

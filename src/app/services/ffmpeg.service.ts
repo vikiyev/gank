@@ -6,6 +6,7 @@ import { createFFmpeg, fetchFile } from '@ffmpeg/ffmpeg';
 })
 export class FfmpegService {
   public isReady = false;
+  public isRunning = false;
   private ffmpeg;
 
   constructor() {
@@ -23,6 +24,8 @@ export class FfmpegService {
   }
 
   async getScreenshots(file: File) {
+    this.isRunning = true;
+
     // convert to binary
     const data = await fetchFile(file);
 
@@ -71,6 +74,14 @@ export class FfmpegService {
       screenshots.push(screenshotUrl);
     });
 
+    this.isRunning = false;
     return screenshots;
+  }
+
+  async blobFromURL(url: string) {
+    const response = await fetch(url);
+    const blob = await response.blob();
+
+    return blob;
   }
 }
