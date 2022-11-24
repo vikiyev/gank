@@ -1,10 +1,13 @@
 # Gank
 
 Features:
-Form validators
+Form Validators
 Stateless authentication with Firebase
 Integration with Firestore database
 Video playback and screenshot generation with FFmpeg
+Lazy Loading
+Infinite Scrolling
+Reusable Modal Component
 
 - [Gank](#gank)
   - [Tailwind Installation](#tailwind-installation)
@@ -66,6 +69,7 @@ Video playback and screenshot generation with FFmpeg
   - [Rendering Videos](#rendering-videos)
   - [Lazy Loading](#lazy-loading)
   - [Deployment](#deployment)
+  - [Testing](#testing)
 
 ## Tailwind Installation
 
@@ -2034,4 +2038,12 @@ The angular app is deployed in Vercel. Since our app uses ffmpeg, we will need a
     }
   ]
 }
+```
+
+## Testing
+
+For testing angular apps, Karma and Jasmine are used. Karma is a test runner which creates a server to load the application and tests automatically, while Jasmine is the test framework. We can configure the Karma configuration settings in `karma.conf.js`. Jasmine can also be configured within this file. To test a n angular app, we use the test command:
+
+```json
+"test": "ng test"
 ```
