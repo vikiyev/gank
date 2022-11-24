@@ -70,6 +70,12 @@ Reusable Modal Component
   - [Lazy Loading](#lazy-loading)
   - [Deployment](#deployment)
   - [Testing](#testing)
+    - [Sanity Test](#sanity-test)
+    - [Creating Component Instance](#creating-component-instance)
+    - [Querying the Template](#querying-the-template)
+    - [Nested Components and Content Projection](#nested-components-and-content-projection)
+    - [Mocking Services](#mocking-services)
+  - [Cypress](#cypress)
 
 ## Tailwind Installation
 
@@ -2046,4 +2052,162 @@ For testing angular apps, Karma and Jasmine are used. Karma is a test runner whi
 
 ```json
 "test": "ng test"
+```
+
+### Sanity Test
+
+A sanity test is a test that always passes. This is used to verify that the tools are set up correctly.
+
+```typescript
+describe("App Component", () => {
+  it("should pass sanity test", () => {
+    expect(true).toBeTruthy();
+  });
+});
+```
+
+### Creating Component Instance
+
+Jasmine allows us to run code before a test is executed using **beforeEach()** however neither Karma or Jasmine can interact with an Angular application. The **TestBed** class initializes environment for testing and provides methods for creating components and services. To load a component's template, we can use **compileComponents()**. We also need to create an instance of the component using **ComponentFixture** which is a wrapper around a component and gives us methods and properties for accessing the components.
+
+```typescript
+describe("About Component", () => {
+  let fixture: ComponentFixture<AboutComponent>;
+  let component: AboutComponent;
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      declarations: [AboutComponent],
+    }).compileComponents();
+  });
+
+  // create a new instance for each test
+  beforeEach(() => {
+    fixture = TestBed.createComponent(AboutComponent);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+  });
+
+  it("should create a component", () => {
+    expect(component).toBeTruthy();
+  });
+});
+```
+
+### Querying the Template
+
+The **fixture.debugElement** property is used for referencing the entire template. We can select an element using the **query()** function. We can generate a selector using **By.css()**. We can also change the properties of the instance through the component.
+
+```typescript
+it("should have .hidden class", () => {
+  const element = fixture.debugElement.query(By.css(".hidden"));
+  expect(element).toBeTruthy();
+});
+
+it("should NOT have .hidden class", () => {
+  component.active = true;
+  fixture.detectChanges();
+
+  const element = fixture.debugElement.query(By.css(".hidden"));
+  expect(element).not.toBeTruthy();
+});
+```
+
+### Nested Components and Content Projection
+
+The TestBed object does not have a solution for adding content to a component. We need to create a dummy host component for dealing with nested components.
+
+```typescript
+@Component({
+  template: ` <app-tabs-container>
+    <app-tab tabTitle="Tab 1"></app-tab>
+    <app-tab tabTitle="Tab 2"></app-tab>
+  </app-tabs-container>`,
+})
+class TestHostComponent {}
+
+describe("TabsContainerComponent", () => {
+  let component: TestHostComponent;
+  let fixture: ComponentFixture<TestHostComponent>;
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      declarations: [TabsContainerComponent, TestHostComponent, TabComponent],
+    }).compileComponents();
+  });
+
+  beforeEach(() => {
+    fixture = TestBed.createComponent(TestHostComponent);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+  });
+
+  it("should create", () => {
+    expect(component).toBeTruthy();
+  });
+
+  it("should have two tabs", () => {
+    const tabs = fixture.debugElement.queryAll(By.css("li"));
+    expect(tabs.length).toBe(2);
+  });
+});
+```
+
+### Mocking Services
+
+Mocking is the process of creating a fake dependency. We can use the **createSpyObj()** from jasmine, which will count the number of times a method is called. The logout link should call the logout() method from the auth service. We can emit an observable that returns a true value for isAuthenticated$. We would then need to override the auth service with our fake service. We can do so by adding it in the providers array of the TestBed. The debugElement object is a platform agnostic reference to an element. It does not contain the same methods and properties on a regular DOM object. We can trigger a click using **triggerEventHandler()**.
+
+```typescript
+const mockAuthService = jasmine.createSpyObj(
+  "AuthService",
+  ["createUser", "logout"],
+  {
+    isAuthenticated$: of(true),
+  }
+);
+
+beforeEach(async () => {
+  await TestBed.configureTestingModule({
+    declarations: [NavComponent],
+    imports: [RouterTestingModule],
+    providers: [{ provide: AuthService, useValue: mockAuthService }],
+  }).compileComponents();
+});
+
+it("should be able to click logout button", () => {
+  const logoutLink = fixture.debugElement.query(By.css("li:nth-child(3) a"));
+  expect(logoutLink).withContext("User is not logged in").toBeTruthy();
+
+  logoutLink.triggerEventHandler("click");
+  // verify logout function was called
+  const service = TestBed.inject(AuthService);
+  expect(service.logout)
+    .withContext("Could not click logout link")
+    .toHaveBeenCalledTimes(1);
+});
+```
+
+## Cypress
+
+E2E testing is a way to check if an application is behaving correctly by automating a browser to mimic user behavior. We can install cypress using `ng add @cypress/schematic`. The tests are containeed in the `cypress/e2e` directory. The fixtures directory contains dummy data which will be available globally. The support directory contains files that will be loaded before the test runs.
+
+We can run jquery functions with **invoke()**
+
+```typescript
+describe("Clip", () => {
+  it("should play clip", () => {
+    // visit homepage
+    cy.visit("/");
+    // click on first clip
+    cy.get("app-clips-list > .grid a:first").click();
+    // click on video player
+    cy.get(".video-js").click();
+    // wait 3 sec
+    cy.wait(3000);
+    // click on video player
+    cy.get(".video-js").click();
+    // assert width of prorgress bar
+    cy.get(".vjs-play-progress").invoke("width").should("gte", 0);
+  });
+});
 ```
