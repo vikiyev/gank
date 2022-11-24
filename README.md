@@ -1,13 +1,21 @@
 # Gank
 
-Features:
-Form Validators
-Stateless authentication with Firebase
-Integration with Firestore database
-Video playback and screenshot generation with FFmpeg
-Lazy Loading
-Infinite Scrolling
-Reusable Modal Component
+Built with Angular, following ZTM's online [course](https://www.udemy.com/course/complete-angular-developer-zero-to-mastery/).
+
+This is an application for gamers to upload and share their clips. Users have an option to login and register to the app. The backend uses Firebase and integrates through AngularFire. The app uses webassembly to process video files for extracting a screenshot.
+
+Check out the live app at [https://ng-gank.vercel.app/](https://ng-gank.vercel.app/) and feel free to register and upload your gaming highlights!
+
+**Features:**
+
+- Form Validation
+- Stateless authentication with Firebase
+- Integration with Firestore database
+- Video playback and screenshot generation with FFmpeg
+- Routing
+- Lazy Loading
+- Infinite Scrolling
+- Reusable Modal Component
 
 - [Gank](#gank)
   - [Tailwind Installation](#tailwind-installation)
