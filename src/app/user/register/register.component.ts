@@ -1,5 +1,9 @@
 import { Component } from '@angular/core';
-import { UntypedFormGroup, UntypedFormControl, Validators } from '@angular/forms';
+import {
+  UntypedFormGroup,
+  UntypedFormControl,
+  Validators,
+} from '@angular/forms';
 
 import { AuthService } from 'src/app/services/auth.service';
 import { RegisterValidators } from '../validators/register-validators';
@@ -15,7 +19,10 @@ export class RegisterComponent {
 
   inSubmission = false;
 
-  name = new UntypedFormControl('', [Validators.required, Validators.minLength(3)]);
+  name = new UntypedFormControl('', [
+    Validators.required,
+    Validators.minLength(3),
+  ]);
   email = new UntypedFormControl(
     '',
     [Validators.required, Validators.email],
@@ -28,7 +35,7 @@ export class RegisterComponent {
   ]);
   password = new UntypedFormControl('', [
     Validators.required,
-    Validators.pattern(/^(?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[a-zA-Z]).{8,}$/gm),
+    Validators.pattern(/^(?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[a-zA-Z]).{8,}$/),
   ]);
   confirm_password = new UntypedFormControl('', [Validators.required]);
   phoneNumber = new UntypedFormControl('', [
